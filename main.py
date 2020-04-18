@@ -1,6 +1,6 @@
 #!/bin/python3
 """Стартовый модуль."""
- import clock
+import clock
  
 # *** Конфигурация
 CONFIG = {clock.LATCH: 7,
@@ -8,6 +8,13 @@ CONFIG = {clock.LATCH: 7,
           clock.SERIAL: 6}
 
 
-if __name__ == '__main__':
-    app = CPerfectClock(CONFIG)
+def main():
+
+    app = clock.CPerfectClock(CONFIG)
     app.run()
+
+    
+
+if __name__ == '__main__':
+
+    main()
