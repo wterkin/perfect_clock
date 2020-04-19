@@ -22,34 +22,29 @@ class CPerfectClock():
         self.config = pdc_сonfig
         self.blink_led_state = False
         self.blink_led = Pin(GPIO_LIST[BLINK_PIN], Pin.OUT)
-        print("@__init__")
-        # self.blink_timer = create_timer(1000, blink)
+        # print("@__init__")
+        self.blink_timer = timers.create_timer(1000, self.blink)
 
     def blink(self):
         """ Моргание светодиодом."""
 
-        print("@blink")
+        # print("@blink")
         if self.blink_led_state is True:
-            print("-")
+            
+            # print("-")
             self.blink_led.off()
             self.blink_led_state = False
         else:
-            print("+")
+            
+            #print("+")
             self.blink_led.on()    
             self.blink_led_state = True
 
     def run(self):
         """Основной цикл."""
-        #try:
-        print("@run")
-        while True:
-            
-            print("=>blink")
-            self.blink()    
-            sleep(0.5)
-            print("=", end="")
 
-        #except as ex:
+        while True:
+
+            pass
             
-        #    print("Exception occured!...", ex)
-        #    # self.blink_timer.deinit()
+
