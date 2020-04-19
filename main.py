@@ -12,9 +12,5 @@ def main():
 
     app = clock.CPerfectClock(CONFIG)
     app.run()
+ 
 
-    
-
-if __name__ == '__main__':
-
-    main()
