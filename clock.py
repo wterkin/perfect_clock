@@ -11,7 +11,7 @@ GPIO_LIST = (16, 5, 4, 0, 2, 14, 12, 13, 15)
 LATCH = "latch"
 CLOCK = "clock"
 SERIAL = "serial"
-BLINK_PIN = 5
+BLINK_PIN = 1
 
 DIGITS = (int('00111111', 2), # 0
           int('00001100', 2), # 1
@@ -39,26 +39,37 @@ START_MSG = (int("01110110", 2), # S
              int("01100011", 2), # t
             )
 
+WORK_PERIOD = 60*1000
+DEBUG = True
+
+
 class CPerfectClock():
     """Основной класс."""
 
     def __init__(self, pdc_сonfig):
         """Конструктор."""
 
+        print("__init__")
         self.config = pdc_сonfig
         # *** Моргающий светодиод
         self.blink_led_state = False
         self.blink_led = Pin(GPIO_LIST[BLINK_PIN], Pin.OUT)
-        self.blink_timer = timers.create_timer(1000, self.blink)
+        self.blink_timer = timers.create_timer(1, self.callback_blink, 1000)
+        # *** Если мы в отладочном режиме - выставляем таймер на выход
+        if DEBUG:
+            
+            self.exit_timer = timers.create_timer(2, self.callback_exit, WORK_PERIOD)
         # *** Сдвиговый регистр
         self.clock_pin = Pin(GPIO_LIST[self.config[CLOCK]])
         self.latch_pin = Pin(GPIO_LIST[self.config[LATCH]])
         self.latch_pin.off()
         self.serial_pin = Pin(GPIO_LIST[self.config[SERIAL]])
         self.shift_out(START_MSG)
+        self.exit_flag = False
         
-    def shift_out(p_data):
         
+    def shift_out(self.p_data):
+        """Функция вывода данных на дисплей."""
         for bit in range(0, 8):
             
             l_value = p_data & (1 << (7-bit))
@@ -66,9 +77,10 @@ class CPerfectClock():
             self.clock_pin.off()
             self.clock_pin.on()
         self.latch_pin.on()    
-            
-    def blink(self, some_param):
-        """ Моргание светодиодом."""
+       
+       
+    def callback_blink(self, some_param):
+        """ Функция обратного вызова для моргания светодиодом."""
 
         if self.blink_led_state is True:
             
@@ -78,13 +90,18 @@ class CPerfectClock():
             
             self.blink_led.on()    
             self.blink_led_state = True
+            
+
+    def callback_set_exit_flag(self):
+        """Функция обратного вызова для остановки программы."""
+
+        self.exit_flag = True
 
 
     def run(self):
         """Основной цикл."""
-
-        while True:
-
+        while not self.exit_flag:
+            
             pass
             
 
