@@ -1,8 +1,25 @@
 #!/bin/python3
 
-from machine import Pin
-import timers
+import gc
+import time
 from time import sleep
+import esp
+import machine
+from machine import Pin, Timer, RTC
+import network
+import ntptime
+import utime
+import tm1637
+
+try:
+    import usocket as socket
+except:
+    import socket
+try:
+    import ustruct as struct
+except:
+    import struct
+
 
 # *** Константы ESP
 GPIO_LIST = (16, 5, 4, 0, 2, 14, 12, 13, 15)
@@ -12,6 +29,7 @@ LATCH = "latch"
 CLOCK = "clock"
 SERIAL = "serial"
 BLINK_PIN = 1
+CONNECTED_PIN = 4
 
 DIGITS = (int('00111111', 2), # 0
           int('00001100', 2), # 1
@@ -50,38 +68,34 @@ class CPerfectClock():
         """Конструктор."""
 
         print("__init__")
+        self.exit_flag = False
         self.config = pdc_сonfig
         # *** Моргающий светодиод
         self.blink_led_state = False
         self.blink_led = Pin(GPIO_LIST[BLINK_PIN], Pin.OUT)
         self.blink_timer = timers.create_timer(1, self.callback_blink, 1000)
+        # *** Светодиод соединения с сетью Wi-Fi
+        self.connected_led = Pin(GPIO_LIST[CONNECTED_PIN])
         # *** Если мы в отладочном режиме - выставляем таймер на выход
         if DEBUG:
             
-            self.exit_timer = timers.create_timer(2, self.callback_exit, WORK_PERIOD)
-        # *** Сдвиговый регистр
-        self.clock_pin = Pin(GPIO_LIST[self.config[CLOCK]])
-        self.latch_pin = Pin(GPIO_LIST[self.config[LATCH]])
-        self.latch_pin.off()
-        self.serial_pin = Pin(GPIO_LIST[self.config[SERIAL]])
-        self.shift_out(START_MSG)
-        self.exit_flag = False
-        
-        
-    def shift_out(self.p_data):
-        """Функция вывода данных на дисплей."""
-        for bit in range(0, 8):
-            
-            l_value = p_data & (1 << (7-bit))
-            self.serial_pin.value(l_value)
-            self.clock_pin.off()
-            self.clock_pin.on()
-        self.latch_pin.on()    
+            self.terminate_timer = timers.create_timer(2, self.callback_terminate, WORK_PERIOD)
+        # *** Создаем объект tm1637
+        clock_pin = Pin(GPIO_LIST[self.config["clock.CLOCK"]])
+        dio_pin = Pin(GPIO_LIST[self.config["clock.DIO"]])
+        self.timemachine = tm1637.TM1637(clk=clock_pin, dio=dio_pin)
+        self.timemachine.write(START_MSG)
+        # *** Соединяемся с сетью Wi-Fi
+        self.estabilish_connection()
        
        
     def callback_blink(self, some_param):
         """ Функция обратного вызова для моргания светодиодом."""
 
+        if DEBUG:
+    
+            print("*", end="")
+           
         if self.blink_led_state is True:
             
             self.blink_led.off()
@@ -92,16 +106,59 @@ class CPerfectClock():
             self.blink_led_state = True
             
 
-    def callback_set_exit_flag(self):
+    def callback_terminate(self, some_param):
         """Функция обратного вызова для остановки программы."""
 
         self.exit_flag = True
+        if DEBUG:
+
+            print("Terminate program.")
+        self.terminate_timer.deinit()
+        self.blink_timer.deinit()
+
+
+    def estabilish_connection(self):
+        """ Процедура осуществляет соединение с выбранной сетью Wi-Fi """
+
+        self.connected_led.off()
+        self.wlan = network.WLAN(network.STA_IF)
+        self.wlan.active(True)
+
+        if not self.wlan.isconnected():
+
+            self.wlan.connect(self.config["clock.SSID"], self.config["clock.PASSWORD"])
+            while not self.wlan.isconnected():
+
+                pass
+        self.connected_led.on()
+
+    def synchronize():
+        """ Процедура синхронизирует системные часы с NTP сервером """
+
+        NTP_QUERY = bytearray(48)
+        NTP_QUERY[0] = 0x1b
+        addr = socket.getaddrinfo('pool.ntp.org', 123)[0][-1]
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.settimeout(1)
+        res = s.sendto(NTP_QUERY, addr)
+        msg = s.recv(48)
+        s.close()
+        val = struct.unpack("!I", msg[40:44])[0]
+        tm = utime.localtime(val - NTP_DELTA)
+        tm = tm[0:3] + (0,) + tm[3:6] + (0,)
+        machine.RTC().datetime(tm)
+
 
 
     def run(self):
         """Основной цикл."""
+        print("Main loop.")
         while not self.exit_flag:
-            
-            pass
-            
+         
+             
+            if self.exit_flag:
+                
+                print("Stopping...")
+                break
+        return None
 
