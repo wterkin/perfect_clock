@@ -26,14 +26,28 @@ except:
 GPIO_LIST = (16, 5, 4, 0, 2, 14, 12, 13, 15)
 
 # *** Конфигурация
+BLINK_PIN = 1
+CONNECTED_PIN = 5
 DISPLAY_DIO_PIN = 2
 DISPLAY_CLOCK_PIN = 3
 SSID = "darKraiNXX"
 PASSWORD = "_7xDsk0_36!7"
+WORK_PERIOD = 60*1000
+DEBUG = True
 
+BLINK_TIMER = 1
+TERMINATE_TIMER = 2
+CLOCK_TIMER = 4
 
-BLINK_PIN = 1
-CONNECTED_PIN = 5
+UTC_DIFF = 3
+
+#          11->A
+#        ---------
+# 10->F |   5->G  | 7->B
+#        ---------  
+#  1->E |         | 4->C
+#        --------- 
+#          2->D
 
 DIGITS = (int('00111111', 2), # 0
           int('00001100', 2), # 1
@@ -46,36 +60,32 @@ DIGITS = (int('00111111', 2), # 0
           int('11111111', 2), # 8
           int('11111110', 2)  # 9
          )
-#          11->A
-#        ---------
-# 10->F |   5->G  | 7->B
-#        ---------  
-#  1->E |         | 4->C
-#        --------- 
-#          2->D
-# StArt
 
-# 00000001 - A
-# 00000010 - B
-# 00000100 - C
-# 00001000 - D
-# 00010000 - E
-# 00100000 - F
-# 01000000 - G
 
-START_MSG = (int("01110110", 2), # S
-             int("01100011", 2), # t
-             int("11111101", 2), # A
+
+START_MSG = (int("01101101", 2), # S
+             int("01111000", 2), # t
+             int("01110111", 2), # A
              int("00110001", 2), # r
-             int("01100011", 2), # t
+             int("01111000", 2), # t
+             0            
             )
 
-WORK_PERIOD = 60*1000
-DEBUG = True
-BLINK_TIMER = 1
-TERMINATE_TIMER = 2
-CLOCK_TIMER = 4
-UTC_DIFF = 3
+CONNECT_MSG = (int('00111001', 2), # C
+               int('00111111', 2), # o
+               int('00110111', 2), # n
+               int('00110111', 2), # n
+               int('01111001', 2), # e
+               int('00111001', 2)) # c
+
+SUCCESS_MSG = (int("01101101", 2), # S
+               int('00111110', 2), # U
+               int('00111001', 2), # C
+               int('00111001', 2), # C
+               int('01111001', 2), # E
+               int("01101101", 2)) # S
+             
+
 
 class CPerfectClock():
     """Основной класс."""
@@ -88,22 +98,22 @@ class CPerfectClock():
         # *** Моргающий светодиод
         self.blink_led_state = False
         self.blink_led = Pin(GPIO_LIST[BLINK_PIN], Pin.OUT)
-        #self.blink_timer = timers.create_timer(BLINK_TIMER, self.callback_blink, 1000)
+        self.blink_timer = timers.create_timer(BLINK_TIMER, self.callback_blink, 1000)
         # *** Светодиод соединения с сетью Wi-Fi
-        self.connected_led = Pin(GPIO_LIST[CONNECTED_PIN])
-        self.connected_led.off()
+        #self.connected_led = Pin(GPIO_LIST[CONNECTED_PIN])
+        #self.connected_led.off()
         # *** Если мы в отладочном режиме - выставляем таймер на выход
-        #if DEBUG:
+        if DEBUG:
             
-        #    self.terminate_timer = timers.create_timer(TERMINATE_TIMER, self.callback_terminate, WORK_PERIOD)
+            self.terminate_timer = timers.create_timer(TERMINATE_TIMER, self.callback_terminate, WORK_PERIOD)
         # *** Создаем объект tm1637
         clock_pin = Pin(GPIO_LIST[DISPLAY_CLOCK_PIN])
         dio_pin = Pin(GPIO_LIST[DISPLAY_DIO_PIN])
         self.timemachine = tm1637.TM1637(clk=clock_pin, dio=dio_pin)
         self.clock_timer = None
         #self.timemachine.show('Start')
-        print("Start")
-        self.timemachine.show('')
+        #print("Start")
+        self.timemachine.write([0, 0, 0, 0, 0, 0])
         
         # *** Соединяемся с сетью Wi-Fi
         self.estabilish_connection()
@@ -130,40 +140,39 @@ class CPerfectClock():
         
         date_time = time.localtime()
         digits = []
+ 
         hours = date_time[3]+UTC_DIFF
         if hours > 23:
             hours = hours - 24
-        minutes = date_time[4]
-        seconds = date_time[5]
-        
+       
         # *** десятки часов
-        # digits.append(DIGITS[hours//10])
-        #digits.append(hours//10)
+        digits.append(DIGITS[hours//10])
+        digits.append(hours//10)
         # *** часы
-        # digits.append(DIGITS[hours%10])
-        #digits.append(hours%10)
+        digits.append(DIGITS[hours%10])
+        digits.append(hours%10)
         # *** десятки минут
-        # digits.append(DIGITS[minutes//10])
-        #digits.append(minutes//10)
+        digits.append(DIGITS[minutes//10])
+        digits.append(minutes//10)
         # *** минуты
-        # digits.append(DIGITS[minutes%10])
-        #digits.append(minutes%10)
+        digits.append(DIGITS[minutes%10])
+        digits.append(minutes%10)
         # *** десятки секунд
-        # digits.append(DIGITS[seconds//10])
-        # digits.append(seconds//10)
+        digits.append(DIGITS[seconds//10])
+        digits.append(seconds//10)
         # *** секунды
-        # digits.append(DIGITS[seconds%10])
-        #digits.append(seconds%10)
-        #digits.append(0)
-        #digits.append(0)
-        #digits.append(0)
-        #digits.append(0)
-        #self.timemachine.write(digits)
-        print(hours//10, hours%10, minutes//10, minutes%10, seconds//10, seconds%10)
+        digits.append(DIGITS[seconds%10])
+        digits.append(seconds%10)
+        self.timemachine.write(reorder(digits))
+        #print(hours//10, hours%10, minutes//10, minutes%10, seconds//10, seconds%10)
         if minutes == 0:
             
             if self.wlan.isconnected():
                 
+                synchronize()
+            else:
+                
+                estabilish_connection()
                 synchronize()
 
 
@@ -183,10 +192,8 @@ class CPerfectClock():
 
     def estabilish_connection(self):
         """ Процедура осуществляет соединение с выбранной сетью Wi-Fi """
-        print("**** Connecting....")
-        self.timemachine.show('cennoC')
-        #self.timemachine.show('222222')
-        self.connected_led.off()
+        self.timemachine.write(reorder(CONNECT_MSG))
+        # self.connected_led.off()
         self.wlan = network.WLAN(network.STA_IF)
         self.wlan.active(True)
 
@@ -196,13 +203,23 @@ class CPerfectClock():
             while not self.wlan.isconnected():
 
                 pass
-        print("**** Connected!!!")
-        #self.timemachine.show('seccuS')
-        #self.clock_timer = timers.create_timer(CLOCK_TIMER, self.callback_clock, 1000)
+        self.timemachine.write(reorder(SUCCESS_MSG))
+        self.clock_timer = timers.create_timer(CLOCK_TIMER, self.callback_clock, 1000)
+        # self.connected_led.on()
+ 
 
-        # self.timemachine.show('333333')
-        self.connected_led.on()
-        
+    def reorder(input_array):
+        """Переставляет знаки в массиве в соответствии с дикой адресацией дисплея."""
+        output_array = []
+        output_array.append(input_array[2])
+        output_array.append(input_array[1])
+        output_array.append(input_array[0])
+        output_array.append(input_array[5])
+        output_array.append(input_array[4])
+        output_array.append(input_array[3])
+        return output_array
+
+ 
     def synchronize():
         """ Процедура синхронизирует системные часы с NTP сервером """
 
@@ -224,15 +241,7 @@ class CPerfectClock():
     def run(self):
         """Основной цикл."""
         print("Main loop.")
-        #while not self.exit_flag:
-        for i in range(1, 10):
-            num = 0
-            for digit in DIGITS:
-                
-                self.timemachine.write([digit, 0, 0, 0, 0, 0])
-                print(num)
-                num += 1
-                sleep(2)
+        while not self.exit_flag:
 
             if self.exit_flag:
                     
