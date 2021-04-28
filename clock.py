@@ -50,19 +50,23 @@ UTC_DIFF = 3
 #          2->D
 
 DIGITS = (int('00111111', 2), # 0
-          int('00001100', 2), # 1
+          int('00000110', 2), # 1
           int('01011011', 2), # 2
-          int('01011110', 2), # 3
-          int('01101100', 2), # 4
-          int('01110110', 2), # 5
-          int('01110111', 2), # 6
-          int('00011100', 2), # 7
+          int('01001111', 2), # 3
+          int('01100110', 2), # 4
+          int('01101101', 2), # 5
+          int('01111101', 2), # 6
+          int('00000111', 2), # 7
           int('11111111', 2), # 8
-          int('11111110', 2)  # 9
+          int('11101111', 2)  # 9
          )
+#        1  
+#$*!!! [12, 1, 254, 9, 63, 0, 255, 8, 12, 1, 119, 6]
 
+#*!!! [12, 1, 254, 9, 63, 0, 255, 8, 12, 1, 28, 7]
 
-
+#1 6 2 6 1 6
+#*!!! [6, 1, 125, 6, 91, 2, 125, 6, 6, 1, 7, 7]
 START_MSG = (int("01101101", 2), # S
              int("01111000", 2), # t
              int("01110111", 2), # A
@@ -141,39 +145,45 @@ class CPerfectClock():
         date_time = time.localtime()
         digits = []
  
-        hours = date_time[3]+UTC_DIFF
+        hours = date_time[3] #+UTC_DIFF
         if hours > 23:
             hours = hours - 24
-       
+        #print("*****", hours)    
         # *** десятки часов
         digits.append(DIGITS[hours//10])
-        digits.append(hours//10)
+        #digits.append(DIGITS[hours//10])
         # *** часы
         digits.append(DIGITS[hours%10])
-        digits.append(hours%10)
+        #digits.append(DIGITS[hours%10])
         # *** десятки минут
+        minutes = date_time[4]
+        #print("*****", minutes)    
         digits.append(DIGITS[minutes//10])
-        digits.append(minutes//10)
+        #digits.append(DIGITS[minutes//10])
         # *** минуты
         digits.append(DIGITS[minutes%10])
-        digits.append(minutes%10)
+        #digits.append(DIGITS[minutes%10])
         # *** десятки секунд
+        seconds = date_time[5]
+        #print("*****", seconds)    
         digits.append(DIGITS[seconds//10])
-        digits.append(seconds//10)
+        #digits.append(DIGITS[seconds//10])
         # *** секунды
         digits.append(DIGITS[seconds%10])
-        digits.append(seconds%10)
-        self.timemachine.write(reorder(digits))
+        #digits.append(DIGITS[seconds%10])
+        #print("!!!", digits)
+        self.timemachine.write(self.reorder(digits))
+        #self.timemachine.write(self.reorder([DIGITS[6], DIGITS[7], DIGITS[8], DIGITS[9], DIGITS[0], DIGITS[0]]))
         #print(hours//10, hours%10, minutes//10, minutes%10, seconds//10, seconds%10)
         if minutes == 0:
             
             if self.wlan.isconnected():
                 
-                synchronize()
+                self.synchronize()
             else:
                 
-                estabilish_connection()
-                synchronize()
+                self.estabilish_connection()
+                self.synchronize()
 
 
     def callback_terminate(self, some_param):
@@ -192,7 +202,7 @@ class CPerfectClock():
 
     def estabilish_connection(self):
         """ Процедура осуществляет соединение с выбранной сетью Wi-Fi """
-        self.timemachine.write(reorder(CONNECT_MSG))
+        self.timemachine.write(self.reorder(CONNECT_MSG))
         # self.connected_led.off()
         self.wlan = network.WLAN(network.STA_IF)
         self.wlan.active(True)
@@ -203,12 +213,12 @@ class CPerfectClock():
             while not self.wlan.isconnected():
 
                 pass
-        self.timemachine.write(reorder(SUCCESS_MSG))
+        self.timemachine.write(self.reorder(SUCCESS_MSG))
         self.clock_timer = timers.create_timer(CLOCK_TIMER, self.callback_clock, 1000)
         # self.connected_led.on()
  
 
-    def reorder(input_array):
+    def reorder(self, input_array):
         """Переставляет знаки в массиве в соответствии с дикой адресацией дисплея."""
         output_array = []
         output_array.append(input_array[2])
@@ -220,7 +230,7 @@ class CPerfectClock():
         return output_array
 
  
-    def synchronize():
+    def synchronize(self):
         """ Процедура синхронизирует системные часы с NTP сервером """
 
         NTP_QUERY = bytearray(48)
