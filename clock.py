@@ -1,5 +1,6 @@
 #!/bin/python3
 
+import timers
 import gc
 import time
 from time import sleep
@@ -24,12 +25,15 @@ except:
 # *** Константы ESP
 GPIO_LIST = (16, 5, 4, 0, 2, 14, 12, 13, 15)
 
-# *** Константы конфига
-LATCH = "latch"
-CLOCK = "clock"
-SERIAL = "serial"
+# *** Конфигурация
+DISPLAY_DIO_PIN = 2
+DISPLAY_CLOCK_PIN = 3
+SSID = "darKraiNXX"
+PASSWORD = "_7xDsk0_36!7"
+
+
 BLINK_PIN = 1
-CONNECTED_PIN = 4
+CONNECTED_PIN = 5
 
 DIGITS = (int('00111111', 2), # 0
           int('00001100', 2), # 1
@@ -59,32 +63,39 @@ START_MSG = (int("01110110", 2), # S
 
 WORK_PERIOD = 60*1000
 DEBUG = True
-
+BLINK_TIMER = 1
+TERMINATE_TIMER = 2
+CLOCK_TIMER = 4
+UTC_DIFF = 3
 
 class CPerfectClock():
     """Основной класс."""
 
-    def __init__(self, pdc_сonfig):
+    def __init__(self):
         """Конструктор."""
 
         print("__init__")
         self.exit_flag = False
-        self.config = pdc_сonfig
         # *** Моргающий светодиод
         self.blink_led_state = False
         self.blink_led = Pin(GPIO_LIST[BLINK_PIN], Pin.OUT)
-        self.blink_timer = timers.create_timer(1, self.callback_blink, 1000)
+        #self.blink_timer = timers.create_timer(BLINK_TIMER, self.callback_blink, 1000)
         # *** Светодиод соединения с сетью Wi-Fi
         self.connected_led = Pin(GPIO_LIST[CONNECTED_PIN])
+        self.connected_led.off()
         # *** Если мы в отладочном режиме - выставляем таймер на выход
-        if DEBUG:
+        #if DEBUG:
             
-            self.terminate_timer = timers.create_timer(2, self.callback_terminate, WORK_PERIOD)
+        #    self.terminate_timer = timers.create_timer(TERMINATE_TIMER, self.callback_terminate, WORK_PERIOD)
         # *** Создаем объект tm1637
-        clock_pin = Pin(GPIO_LIST[self.config["clock.CLOCK"]])
-        dio_pin = Pin(GPIO_LIST[self.config["clock.DIO"]])
+        clock_pin = Pin(GPIO_LIST[DISPLAY_CLOCK_PIN])
+        dio_pin = Pin(GPIO_LIST[DISPLAY_DIO_PIN])
         self.timemachine = tm1637.TM1637(clk=clock_pin, dio=dio_pin)
-        self.timemachine.write(START_MSG)
+        self.clock_timer = None
+        #self.timemachine.show('Start')
+        print("Start")
+        self.timemachine.show('')
+        
         # *** Соединяемся с сетью Wi-Fi
         self.estabilish_connection()
        
@@ -105,6 +116,47 @@ class CPerfectClock():
             self.blink_led.on()    
             self.blink_led_state = True
             
+    def callback_clock(self, some_param):
+        """Функция обратного вызова для часов."""
+        
+        date_time = time.localtime()
+        digits = []
+        hours = date_time[3]+UTC_DIFF
+        if hours > 23:
+            hours = hours - 24
+        minutes = date_time[4]
+        seconds = date_time[5]
+        
+        # *** десятки часов
+        # digits.append(DIGITS[hours//10])
+        #digits.append(hours//10)
+        # *** часы
+        # digits.append(DIGITS[hours%10])
+        #digits.append(hours%10)
+        # *** десятки минут
+        # digits.append(DIGITS[minutes//10])
+        #digits.append(minutes//10)
+        # *** минуты
+        # digits.append(DIGITS[minutes%10])
+        #digits.append(minutes%10)
+        # *** десятки секунд
+        # digits.append(DIGITS[seconds//10])
+        # digits.append(seconds//10)
+        # *** секунды
+        # digits.append(DIGITS[seconds%10])
+        #digits.append(seconds%10)
+        #digits.append(0)
+        #digits.append(0)
+        #digits.append(0)
+        #digits.append(0)
+        #self.timemachine.write(digits)
+        print(hours//10, hours%10, minutes//10, minutes%10, seconds//10, seconds%10)
+        if minutes == 0:
+            
+            if self.wlan.isconnected():
+                
+                synchronize()
+
 
     def callback_terminate(self, some_param):
         """Функция обратного вызова для остановки программы."""
@@ -115,23 +167,33 @@ class CPerfectClock():
             print("Terminate program.")
         self.terminate_timer.deinit()
         self.blink_timer.deinit()
+        if self.clock_timer is not None:
+            
+            self.clock_timer.deinit()
 
 
     def estabilish_connection(self):
         """ Процедура осуществляет соединение с выбранной сетью Wi-Fi """
-
+        print("**** Connecting....")
+        self.timemachine.show('cennoC')
+        #self.timemachine.show('222222')
         self.connected_led.off()
         self.wlan = network.WLAN(network.STA_IF)
         self.wlan.active(True)
 
         if not self.wlan.isconnected():
 
-            self.wlan.connect(self.config["clock.SSID"], self.config["clock.PASSWORD"])
+            self.wlan.connect(SSID, PASSWORD)
             while not self.wlan.isconnected():
 
                 pass
-        self.connected_led.on()
+        print("**** Connected!!!")
+        #self.timemachine.show('seccuS')
+        #self.clock_timer = timers.create_timer(CLOCK_TIMER, self.callback_clock, 1000)
 
+        # self.timemachine.show('333333')
+        self.connected_led.on()
+        
     def synchronize():
         """ Процедура синхронизирует системные часы с NTP сервером """
 
@@ -153,12 +215,20 @@ class CPerfectClock():
     def run(self):
         """Основной цикл."""
         print("Main loop.")
-        while not self.exit_flag:
-         
-             
-            if self.exit_flag:
+        #while not self.exit_flag:
+        for i in range(1, 10):
+            num = 0
+            for digit in DIGITS:
                 
-                print("Stopping...")
-                break
+                self.timemachine.write([digit, 0, 0, 0, 0, 0])
+                print(num)
+                num += 1
+                sleep(2)
+
+            if self.exit_flag:
+                    
+                    print("Stopping...")
+                    break
         return None
 
+# import os;os.rename("clock.py", "_clock.py");print("reset ESP!!!")

@@ -2,13 +2,6 @@
 """Стартовый модуль."""
 import clock
  
-# *** Конфигурация
-CONFIG = {clock.DIO: 2,
-          clock.CLOCK: 3,
-          clock.SSID: "darKraiNXX",
-          clock.PASSWORD: "_7xDsk0_36!7"
-          }
-
 
 def estabilish_connection():
     """ Процедура осуществляет соединение с выбранной сетью Wi-Fi """
@@ -27,7 +20,7 @@ def estabilish_connection():
 
 def main():
 
-    app = clock.CPerfectClock(CONFIG)
+    app = clock.CPerfectClock()
     app.run()
     if clock.DEBUG:
         
