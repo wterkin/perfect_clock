@@ -14,37 +14,35 @@ import tm1637
 import sys
 
 try:
+
     import usocket as socket
 except:
+
     import socket
 try:
+
     import ustruct as struct
 except:
-    import struct
 
+    import struct
 
 # *** Константы ESP
 GPIO_LIST = (16, 5, 4, 0, 2, 14, 12, 13, 15)
 
 # *** Конфигурация
 BLINK_PIN = 1
-CONNECTED_PIN = 5
 DISPLAY_DIO_PIN = 2
 DISPLAY_CLOCK_PIN = 3
-# SSID = ""
-# PASSWORD = ""
-NETWORKS = [["ice_phone", "_7xDsk0_36!7"], ["icenet67", ""]]
-
+NETWORK_SSID = "icemobile"
+NETWORK_PASS = "dex12345"
 WORK_PERIOD = 180*1000
-DEBUG = True
-
+DEBUG = False
 BLINK_TIMER = 1
 TERMINATE_TIMER = 2
 CLOCK_TIMER = 4
-
 UTC_DIFF = 3
 NTP_DELTA = 3155673600
-TRY_COUNT = 5
+TRY_COUNT = 50
 #          11->A
 #        ---------
 # 10->F |   5->G  | 7->B
@@ -52,6 +50,16 @@ TRY_COUNT = 5
 #  1->E |         | 4->C
 #        --------- 
 #          2->D
+EMPTY_DISPLAY = [0, 0, 0, 0, 0, 0]
+
+#                HGFEDCBA
+FAIL_MSG = (int('01110001', 2), # F
+            int('01110111', 2), # A
+            int('00000110', 2), # I
+            int('00111000', 2), # L
+            0,
+            0)  
+
 
 DIGITS = (int('00111111', 2), # 0
           int('00000110', 2), # 1
@@ -100,14 +108,13 @@ SUCCESS_MSG = (int("01101101", 2), # S
                int("01101101", 2)) # S
              
 
-
 class CPerfectClock():
     """Основной класс."""
 
     def __init__(self):
         """Конструктор."""
 
-        self.digits = [0, 0, 0, 0, 0, 0]
+        self.digits = EMPTY_DISPLAY
         self.exit_flag = False
         self.seconds = 0
         self.minutes = 0
@@ -120,47 +127,29 @@ class CPerfectClock():
         clock_pin = Pin(GPIO_LIST[DISPLAY_CLOCK_PIN])
         dio_pin = Pin(GPIO_LIST[DISPLAY_DIO_PIN])
         self.timemachine = tm1637.TM1637(clk=clock_pin, dio=dio_pin)
+        self.timemachine.write(EMPTY_DISPLAY)
         self.clock_timer = None
-        self.timemachine.write([0, 0, 0, 0, 0, 0])
-        
-        # *** Соединяемся с сетью Wi-Fi
-        self.NTP_QUERY = bytearray(48)
-        self.NTP_QUERY[0] = 0x1b
-
         self.timemachine.write(self.reorder(CONNECT_MSG))
-        if connect():
+        # *** Соединяемся с сетью Wi-Fi
+        print("\n ******** 0007")
+        if self.connect():
 
             self.timemachine.write(self.reorder(SUCCESS_MSG))
             self.synchronize()
             self.clock_timer = timers.create_timer(CLOCK_TIMER, self.callback_clock, 1000)
         else:
-        
-            sys.exit()
 
-    
-    def connect():
-        """Соединяемся с интернетом."""
-        connected = False
-        
-        for try_number in range(TRY_COUNT):
-            
-            for network_idx in range(2):
-        
-                if self.estabilish_connection2(network_idx):
-                    
-                    connected = True
-                    break
-            if connected:
-            
-                break
-        return connected        
+            self.timemachine.write(self.reorder(FAIL_MSG))
+            sys.exit()
     
 
     def read_time(self):
         """Читает время в переменные класса."""
+
         date_time = time.localtime()
         self.hours = date_time[3] + UTC_DIFF
         if self.hours > 23:
+
             self.hours = hours - 24
         self.minutes = date_time[4]
         self.seconds = date_time[5]
@@ -168,6 +157,7 @@ class CPerfectClock():
 
     def tick(self):
         """Пересчитывает время на секунду вперед."""
+
         if self.seconds < 59:
             
             self.seconds += 1
@@ -237,37 +227,43 @@ class CPerfectClock():
 
             self.clock_timer.deinit()
 
-    """
+    def connect(self):
+        """Соединяемся с интернетом."""
+
+        connected = False
+        
+        for try_number in range(TRY_COUNT):
+
+            # print(try_number, NETWORKS[SSID_IDX], NETWORKS[PWD_IDX])
+            if self.estabilish_connection():
+                    
+                connected = True
+                break
+            if connected:
+            
+                break
+        return connected        
+    
+
     def estabilish_connection(self):
-        \""" Процедура осуществляет соединение с выбранной сетью Wi-Fi "\""
-        self.timemachine.write(self.reorder(CONNECT_MSG))
-        self.wlan = network.WLAN(network.STA_IF)
-        self.wlan.active(True)
-
-        if not self.wlan.isconnected():
-
-            self.wlan.connect(SSID, PASSWORD)
-            while not self.wlan.isconnected():
-
-                pass
-        self.timemachine.write(self.reorder(SUCCESS_MSG))
-        self.synchronize()
-    """
-
-    def estabilish_connection2(self, network_idx):
         """ Процедура осуществляет соединение с выбранной сетью Wi-Fi """
+
         self.wlan = network.WLAN(network.STA_IF)
-        self.wlan.active(True)
-
         if not self.wlan.isconnected():
-
-            self.wlan.connect(NETWORKS[network_idx][0], NETWORKS[network_idx][0])
+            
+            print(f"Connecting to {NETWORK_SSID} with pass {NETWORK_PASS}")
+            self.wlan.active(True)
+            self.wlan.connect(NETWORK_SSID, NETWORK_PASS)
+            if not self.wlan.isconnected():
+                print("Fail.")
             return self.wlan.isconnected()
-
+        return True
  
     def synchronize(self):
         """ Процедура синхронизирует системные часы с NTP сервером """
 
+        self.NTP_QUERY = bytearray(48)
+        self.NTP_QUERY[0] = 0x1b
         server_address = socket.getaddrinfo('pool.ntp.org', 123)[0][-1]
         net_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         net_socket.settimeout(1)
@@ -293,15 +289,15 @@ class CPerfectClock():
         return output_array
 
 
-    def run(self):
-        """Основной цикл."""
-        print("Main loop.")
-        while not self.exit_flag:
-
-            if self.exit_flag:
-
-                    print("Stopping...")
-                    break
-        return None
+#    def run(self):
+#        """Основной цикл."""
+##        print("Main loop.")
+#        while not self.exit_flag:
+#
+#            if self.exit_flag:
+#
+#                print("Stopping...")
+#                break
+#        return None
 
 # import os;os.rename("clock.py", "_clock.py");print("reset ESP!!!")
