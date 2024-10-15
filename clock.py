@@ -42,7 +42,7 @@ TERMINATE_TIMER = 2
 CLOCK_TIMER = 4
 UTC_DIFF = 3
 NTP_DELTA = 3155673600
-TRY_COUNT = 50
+TRY_COUNT = 5
 #          11->A
 #        ---------
 # 10->F |   5->G  | 7->B
@@ -50,16 +50,17 @@ TRY_COUNT = 50
 #  1->E |         | 4->C
 #        --------- 
 #          2->D
+#                HGFEDCBA
+
 EMPTY_DISPLAY = [0, 0, 0, 0, 0, 0]
 
-#                HGFEDCBA
+
 FAIL_MSG = (int('01110001', 2), # F
             int('01110111', 2), # A
             int('00000110', 2), # I
             int('00111000', 2), # L
             0,
             0)  
-
 
 DIGITS = (int('00111111', 2), # 0
           int('00000110', 2), # 1
@@ -107,6 +108,13 @@ SUCCESS_MSG = (int("01101101", 2), # S
                int('01111001', 2), # E
                int("01101101", 2)) # S
              
+TRY_MSG = [int("01111000",2),  # t
+           int("00110001",2),  # r
+           int("01101110",2),  # y
+           0,
+           0,
+           0]
+
 
 class CPerfectClock():
     """Основной класс."""
@@ -129,17 +137,18 @@ class CPerfectClock():
         self.timemachine = tm1637.TM1637(clk=clock_pin, dio=dio_pin)
         self.timemachine.write(EMPTY_DISPLAY)
         self.clock_timer = None
-        self.timemachine.write(self.reorder(CONNECT_MSG))
+        self.display(CONNECT_MSG)
+        
         # *** Соединяемся с сетью Wi-Fi
-        print("\n ******** 0007")
+        # print("\n ******** 0007")
         if self.connect():
-
-            self.timemachine.write(self.reorder(SUCCESS_MSG))
+            
+            self.display(SUCCESS_MSG)
             self.synchronize()
             self.clock_timer = timers.create_timer(CLOCK_TIMER, self.callback_clock, 1000)
         else:
 
-            self.timemachine.write(self.reorder(FAIL_MSG))
+            self.display(FAIL_MSG)
             sys.exit()
     
 
@@ -200,7 +209,7 @@ class CPerfectClock():
         if self.seconds == 59:
             
             self.read_time()
-        if self.minutes == 59:
+        if self.minutes % 10 == 0:
 
             if self.wlan.isconnected():
 
@@ -231,14 +240,18 @@ class CPerfectClock():
         """Соединяемся с интернетом."""
 
         connected = False
-        
         for try_number in range(TRY_COUNT):
 
-            # print(try_number, NETWORKS[SSID_IDX], NETWORKS[PWD_IDX])
+            msg = TRY_MSG
+            msg[4] = DIGITS[try_number+1]
+            self.display(msg)
             if self.estabilish_connection():
                     
                 connected = True
                 break
+            else:     
+
+                sleep(1)        
             if connected:
             
                 break
@@ -251,10 +264,11 @@ class CPerfectClock():
         self.wlan = network.WLAN(network.STA_IF)
         if not self.wlan.isconnected():
             
-            print(f"Connecting to {NETWORK_SSID} with pass {NETWORK_PASS}")
+            # print(f"Connecting to {NETWORK_SSID} with pass {NETWORK_PASS}")
             self.wlan.active(True)
             self.wlan.connect(NETWORK_SSID, NETWORK_PASS)
             if not self.wlan.isconnected():
+                
                 print("Fail.")
             return self.wlan.isconnected()
         return True
@@ -276,28 +290,19 @@ class CPerfectClock():
         machine.RTC().datetime(tm)
         self.read_time()
 
-
-    def reorder(self, input_array):
-        """Переставляет знаки в массиве в соответствии с дикой адресацией диспл"""
-        output_array = []
-        output_array.append(input_array[2])
-        output_array.append(input_array[1])
-        output_array.append(input_array[0])
-        output_array.append(input_array[5])
-        output_array.append(input_array[4])
-        output_array.append(input_array[3])
-        return output_array
-
-
-#    def run(self):
-#        """Основной цикл."""
-##        print("Main loop.")
-#        while not self.exit_flag:
-#
-#            if self.exit_flag:
-#
-#                print("Stopping...")
-#                break
-#        return None
-
-# import os;os.rename("clock.py", "_clock.py");print("reset ESP!!!")
+    def display(self, text):
+        """Выводит информацию на табло."""
+        
+        buffer = []
+        if len(text) == 6:
+            buffer.append(text[2])
+            buffer.append(text[1])
+            buffer.append(text[0])
+            buffer.append(text[5])
+            buffer.append(text[4])
+            buffer.append(text[3])
+            self.timemachine.write(buffer)
+        else: 
+            
+            print("Incorrect length of text!")    
+       

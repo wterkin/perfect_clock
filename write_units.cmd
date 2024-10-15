@@ -1,0 +1,1 @@
+C:\langs\python\env\esp\Scripts\
