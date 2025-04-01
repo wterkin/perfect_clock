@@ -51,7 +51,7 @@ TRY_SLEEP = 1  # sec
 DISPLAY_TIME = 60  # sec
 GLOBAL_DEBUG: bool = True
 MOTION_FLAG: bool = False
-
+SYNCHRONIZE_TIME: int = 1
 #          11->A
 #        ---------
 # 10->F |   5->G  | 7->B
@@ -127,23 +127,17 @@ TRY_MSG = [int("01111000",2),  # t
 def debug(pmsg: str):
 
 	print(pmsg)
+
+
 def motion_detector(pin):
         
     debug("*** Motion detected! ***")
     global MOTION_FLAG
     MOTION_FLAG = True
-    debug(pin.value())
 
 
 class CPerfectClock():
     """Основной класс."""
-
-    def motion_detected(pin):
-        
-        debug("*** Motion detected! ***")
-        self.motion_detected = True
-        self.motion_led_pin.value(True)
-        self.display_time = DISPLAY_TIME
 
     def __init__(self):
         """Конструктор."""
@@ -187,12 +181,37 @@ class CPerfectClock():
             self.display(SUCCESS_MSG)
             self.synchronize()
             self.clock_timer = timers.create_timer(CLOCK_TIMER, self.callback_clock, CLOCK_TIMER_PERIOD)
-            # debug(f" *** Timer created. {CLOCK_TIMER_PERIOD}")
         else:
 
             self.display(FAIL_MSG)
             sys.exit()
     
+	def indicate(self):
+		"""Функция выводит текущее время на индикатор."""
+
+        # *** Кодируем текущее время для индицирования
+		# * Минуты
+        self.digits[0] = DIGITS[self.minutes//10]
+        # * 1. часы
+        if self.refresh:
+            
+            self.digits[1] = DIGITS_DOT[self.hours%10]
+        else:
+            
+            self.digits[1] = DIGITS[self.hours%10]      
+        # * 2. десятки часов
+        self.digits[2] = DIGITS[self.hours//10]
+        # * 3. секунды
+        self.digits[3] = DIGITS[self.seconds%10]
+        # * 4. десятки секунд
+        self.digits[4] = DIGITS[self.seconds//10]
+        # * 5. минуты
+        self.digits[5] = DIGITS[self.minutes%10]
+
+        # *** Выводим.
+        self.timemachine.write(self.digits)
+
+
     def read_time(self):
         """Читает время в переменные класса."""
     
@@ -241,38 +260,26 @@ class CPerfectClock():
             print("*** Terminated!!! ")
             self.clock_timer.deinit()
             self.terminate_timer.deinit()
-        # if self.motion_detected:
+
         if MOTION_FLAG:
-        
-            self.motion_led_pin.value(not self.motion_led_pin.value())  
-            self.display_time -=1
+
+			# *** Если индикация выключена.
             if self.display_time == 0:
-                
-                debug("Motion!")
-                self.motion_detected = False
-                self.motion_led_pin.value(False)
+				
+				MOTION_FLAG = False                
+                debug("Indication will be turned on!")
+				display_time = DISPLAY_TIME
+                self.motion_led_pin.value(True)
 
-        # *** Кодируем текущее время для индицирования
-        # * 0. десятки минут
-        self.digits[0] = DIGITS[self.minutes//10]
-        # * 1. часы
-        if self.refresh:
-            
-            self.digits[1] = DIGITS_DOT[self.hours%10]
-        else:
-            
-            self.digits[1] = DIGITS[self.hours%10]      
-        # * 2. десятки часов
-        self.digits[2] = DIGITS[self.hours//10]
-        # * 3. секунды
-        self.digits[3] = DIGITS[self.seconds%10]
-        # * 4. десятки секунд
-        self.digits[4] = DIGITS[self.seconds//10]
-        # * 5. минуты
-        self.digits[5] = DIGITS[self.minutes%10]
+    	if self.display_time > 0:
 
-        # *** Выводим.
-        self.timemachine.write(self.digits)
+            self.display_time -=1
+			if 	self.display_time == 0:
+
+		    	self.motion_led_pin.value(False)
+
+                # self.motion_led_pin.value(not self.motion_led_pin.value())
+		self.indicate()
         
         # *** Каждую минуту получаем время из системных часов
         if self.seconds == 59:
@@ -280,28 +287,32 @@ class CPerfectClock():
             self.read_time()
 
         # *** По наступлении 11-й минуты запрашиваем время по ntp   
-        """!        
-        if self.minutes % 11 == 0 and self.seconds == 11:
+        # if self.minutes % 11 == 0 and self.seconds == 11:
+		if self.minutes == SYNCHRONIZE_TIME and self.seconds == SYNCHRONIZE_TIME:
 
+     		# *** Если соединение установлено...
             if self.wlan.isconnected():
 
+				# *** .. получаем время с NTP сервера...
                 self.synchronize()
             else:
 
+				# *** .. иначе соединяемся с сетью...
                 if self.connect():
                 
+					# *** .. если удачно - получаем время..
                     self.synchronize()
                 else:
 
+					# *** Если нет - увы...
+					self.callback_terminate("")
                     sys.exit()
-        """
 
     def callback_terminate(self, some_param):
-        #""Функция обратного вызова для остановки программы."""
-        debug(" *** callback_terminate")
+        """Функция обратного вызова для остановки программы."""
 
+        debug(" *** callback_terminate")
         self.exit_flag = True
-        # debug("Terminate program.")
         self.terminate_timer.deinit()
         if self.clock_timer is not None:
 
@@ -309,7 +320,7 @@ class CPerfectClock():
 
 
     def connect(self):
-        #""Соединяемся с интернетом."""
+        """Соединяемся с интернетом."""
         debug(" *** connect ")
         connected = False
         for try_number in range(TRY_COUNT):
