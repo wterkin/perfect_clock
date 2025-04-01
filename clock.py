@@ -6,7 +6,6 @@ import time
 from time import sleep
 import esp
 import machine
-from machine import Pin, Timer, RTC
 import network
 import ntptime
 import utime
@@ -27,22 +26,32 @@ except:
     import struct
 
 # *** Константы ESP
-GPIO_LIST = (16, 5, 4, 0, 2, 14, 12, 13, 15)
+GPIO_LIST = (16, 5, 4, 0, 2, 14, 12, 13, 15, 3, 1)
 
 # *** Конфигурация
-BLINK_PIN = 1
+# BLINK_PIN = 7
+HALT_BUTTON_PIN = 0
+MOTION_LED_PIN = 1
 DISPLAY_DIO_PIN = 2
 DISPLAY_CLOCK_PIN = 3
+PIR_PIN = 4
+
 NETWORK_SSID = "icemobile"
 NETWORK_PASS = "dex12345"
-WORK_PERIOD = 180*1000
-DEBUG = False
+WORK_PERIOD = 360*1000
 BLINK_TIMER = 1
 TERMINATE_TIMER = 2
 CLOCK_TIMER = 4
+CLOCK_TIMER_PERIOD = 1000
+DEBUG = True
 UTC_DIFF = 3
 NTP_DELTA = 3155673600
 TRY_COUNT = 5
+TRY_SLEEP = 1  # sec
+DISPLAY_TIME = 60  # sec
+GLOBAL_DEBUG: bool = True
+MOTION_FLAG: bool = False
+
 #          11->A
 #        ---------
 # 10->F |   5->G  | 7->B
@@ -50,10 +59,9 @@ TRY_COUNT = 5
 #  1->E |         | 4->C
 #        --------- 
 #          2->D
-#                HGFEDCBA
+#                H  G  F  E  D  C  B  A
 
 EMPTY_DISPLAY = [0, 0, 0, 0, 0, 0]
-
 
 FAIL_MSG = (int('01110001', 2), # F
             int('01110111', 2), # A
@@ -116,45 +124,79 @@ TRY_MSG = [int("01111000",2),  # t
            0]
 
 
+def debug(pmsg: str):
+
+	print(pmsg)
+def motion_detector(pin):
+        
+    debug("*** Motion detected! ***")
+    global MOTION_FLAG
+    MOTION_FLAG = True
+    debug(pin.value())
+
+
 class CPerfectClock():
     """Основной класс."""
 
+    def motion_detected(pin):
+        
+        debug("*** Motion detected! ***")
+        self.motion_detected = True
+        self.motion_led_pin.value(True)
+        self.display_time = DISPLAY_TIME
+
     def __init__(self):
         """Конструктор."""
-
+        debug(" *** __init__")
         self.digits = EMPTY_DISPLAY
         self.exit_flag = False
         self.seconds = 0
         self.minutes = 0
         self.hours = 0
+        self.refresh = False
+        self.display_time = DISPLAY_TIME
+        self.motion_detected = False
+
         # *** Если мы в отладочном режиме - выставляем таймер на выход
         if DEBUG:
             
             self.terminate_timer = timers.create_timer(TERMINATE_TIMER, self.callback_terminate, WORK_PERIOD)
+
+        # *** Светодиод должен загораться при срабатывании детектора движения
+        self.motion_led_pin = machine.Pin(GPIO_LIST[MOTION_LED_PIN], machine.Pin.OUT)
+
+        # *** Кнопка для остановки таймера
+        self.halt_button = machine.Pin(GPIO_LIST[HALT_BUTTON_PIN], machine.Pin.IN)
+
         # *** Создаем объект tm1637
-        clock_pin = Pin(GPIO_LIST[DISPLAY_CLOCK_PIN])
-        dio_pin = Pin(GPIO_LIST[DISPLAY_DIO_PIN])
+        clock_pin = machine.Pin(GPIO_LIST[DISPLAY_CLOCK_PIN], machine.Pin.OUT)
+        dio_pin = machine.Pin(GPIO_LIST[DISPLAY_DIO_PIN], machine.Pin.OUT)
         self.timemachine = tm1637.TM1637(clk=clock_pin, dio=dio_pin)
         self.timemachine.write(EMPTY_DISPLAY)
+        
+        # *** Датчик движения
+        self.pir_sensor = machine.Pin(GPIO_LIST[PIR_PIN], machine.Pin.IN)
+        self.pir_sensor.irq(trigger=machine.Pin.IRQ_RISING, handler=motion_detector)
+        
         self.clock_timer = None
         self.display(CONNECT_MSG)
         
         # *** Соединяемся с сетью Wi-Fi
-        # print("\n ******** 0007")
         if self.connect():
             
             self.display(SUCCESS_MSG)
             self.synchronize()
-            self.clock_timer = timers.create_timer(CLOCK_TIMER, self.callback_clock, 1000)
+            self.clock_timer = timers.create_timer(CLOCK_TIMER, self.callback_clock, CLOCK_TIMER_PERIOD)
+            # debug(f" *** Timer created. {CLOCK_TIMER_PERIOD}")
         else:
 
             self.display(FAIL_MSG)
             sys.exit()
     
-
     def read_time(self):
         """Читает время в переменные класса."""
-
+    
+        debug(" *** read_time ")
         date_time = time.localtime()
         self.hours = date_time[3] + UTC_DIFF
         if self.hours > 23:
@@ -189,27 +231,57 @@ class CPerfectClock():
 
     def callback_clock(self, some_param):
         """Функция обратного вызова для часов."""
-        
+        global MOTION_FLAG
+        # *** Пересчитываем время
         self.tick()
-            
-        # *** 0. десятки минут
+        
+        # *** Проверим, не нажата ли кнопка остановки?
+        if self.halt_button.value() == 0:
+
+            print("*** Terminated!!! ")
+            self.clock_timer.deinit()
+            self.terminate_timer.deinit()
+        # if self.motion_detected:
+        if MOTION_FLAG:
+        
+            self.motion_led_pin.value(not self.motion_led_pin.value())  
+            self.display_time -=1
+            if self.display_time == 0:
+                
+                debug("Motion!")
+                self.motion_detected = False
+                self.motion_led_pin.value(False)
+
+        # *** Кодируем текущее время для индицирования
+        # * 0. десятки минут
         self.digits[0] = DIGITS[self.minutes//10]
-        # *** 1. часы
-        self.digits[1] = DIGITS_DOT[self.hours%10]
-        # *** 2. десятки часов
+        # * 1. часы
+        if self.refresh:
+            
+            self.digits[1] = DIGITS_DOT[self.hours%10]
+        else:
+            
+            self.digits[1] = DIGITS[self.hours%10]      
+        # * 2. десятки часов
         self.digits[2] = DIGITS[self.hours//10]
-        # *** 3. секунды
+        # * 3. секунды
         self.digits[3] = DIGITS[self.seconds%10]
-        # *** 4. десятки секунд
+        # * 4. десятки секунд
         self.digits[4] = DIGITS[self.seconds//10]
-        # *** 5. минуты
-        self.digits[5] = DIGITS_DOT[self.minutes%10]
+        # * 5. минуты
+        self.digits[5] = DIGITS[self.minutes%10]
+
         # *** Выводим.
         self.timemachine.write(self.digits)
+        
+        # *** Каждую минуту получаем время из системных часов
         if self.seconds == 59:
             
             self.read_time()
-        if self.minutes % 10 == 0:
+
+        # *** По наступлении 11-й минуты запрашиваем время по ntp   
+        """!        
+        if self.minutes % 11 == 0 and self.seconds == 11:
 
             if self.wlan.isconnected():
 
@@ -222,23 +294,23 @@ class CPerfectClock():
                 else:
 
                     sys.exit()
-
+        """
 
     def callback_terminate(self, some_param):
-        """Функция обратного вызова для остановки программы."""
+        #""Функция обратного вызова для остановки программы."""
+        debug(" *** callback_terminate")
 
         self.exit_flag = True
-        if DEBUG:
-
-            print("Terminate program.")
+        # debug("Terminate program.")
         self.terminate_timer.deinit()
         if self.clock_timer is not None:
 
             self.clock_timer.deinit()
 
-    def connect(self):
-        """Соединяемся с интернетом."""
 
+    def connect(self):
+        #""Соединяемся с интернетом."""
+        debug(" *** connect ")
         connected = False
         for try_number in range(TRY_COUNT):
 
@@ -251,7 +323,7 @@ class CPerfectClock():
                 break
             else:     
 
-                sleep(1)        
+                sleep(TRY_SLEEP)
             if connected:
             
                 break
@@ -260,22 +332,25 @@ class CPerfectClock():
 
     def estabilish_connection(self):
         """ Процедура осуществляет соединение с выбранной сетью Wi-Fi """
-
+        debug(" *** estabilish_connection ")
+    
         self.wlan = network.WLAN(network.STA_IF)
         if not self.wlan.isconnected():
             
-            # print(f"Connecting to {NETWORK_SSID} with pass {NETWORK_PASS}")
+            debug(f"Connecting to {NETWORK_SSID} with pass {NETWORK_PASS}")
             self.wlan.active(True)
             self.wlan.connect(NETWORK_SSID, NETWORK_PASS)
             if not self.wlan.isconnected():
                 
-                print("Fail.")
+                debug("Fail.")
             return self.wlan.isconnected()
         return True
  
+
     def synchronize(self):
         """ Процедура синхронизирует системные часы с NTP сервером """
-
+        debug(" *** synchronize ")        
+    
         self.NTP_QUERY = bytearray(48)
         self.NTP_QUERY[0] = 0x1b
         server_address = socket.getaddrinfo('pool.ntp.org', 123)[0][-1]
@@ -289,12 +364,16 @@ class CPerfectClock():
         tm = tm[0:3] + (0,) + tm[3:6] + (0,)
         machine.RTC().datetime(tm)
         self.read_time()
+        self.refresh = not self.refresh
+        debug(" *** Synced!! ")
+
 
     def display(self, text):
         """Выводит информацию на табло."""
-        
+        debug(" *** display ")        
         buffer = []
         if len(text) == 6:
+
             buffer.append(text[2])
             buffer.append(text[1])
             buffer.append(text[0])
@@ -302,7 +381,6 @@ class CPerfectClock():
             buffer.append(text[4])
             buffer.append(text[3])
             self.timemachine.write(buffer)
-        else: 
-            
-            print("Incorrect length of text!")    
-       
+        else:
+     
+            debug("Incorrect length of text!")    
