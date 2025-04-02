@@ -11,6 +11,7 @@ import ntptime
 import utime
 import tm1637
 import sys
+import ujson
 
 try:
 
@@ -36,8 +37,7 @@ DISPLAY_DIO_PIN = 2
 DISPLAY_CLOCK_PIN = 3
 PIR_PIN = 4
 
-NETWORK_SSID = "icemobile"
-NETWORK_PASS = "dex12345"
+CREDENTIAL_FILE = "credential"
 WORK_PERIOD = 360*1000
 BLINK_TIMER = 1
 TERMINATE_TIMER = 2
@@ -158,12 +158,23 @@ class CPerfectClock():
         self.refresh = False
         self.display_time = DISPLAY_TIME
         self.motion_detected = False
-
+		self.ssid = ""
+        self.pass = ""
         # *** Если мы в отладочном режиме - выставляем таймер на выход
         if DEBUG:
             
             self.terminate_timer = timers.create_timer(TERMINATE_TIMER, self.callback_terminate, WORK_PERIOD)
-
+            cred_file = open("cred_test", "r")
+            
+        else:
+       
+            cred_file = open("credential", "r")
+        json = cred_file.read()
+        cred_file.close()
+        credential = ujson.load(json)
+        self.ssid = credential["ssid"] 
+        self.pass = credential["pass"] 
+        
         # *** Светодиод должен загораться при срабатывании детектора движения
         self.motion_led_pin = machine.Pin(GPIO_LIST[MOTION_LED_PIN], machine.Pin.OUT)
 
@@ -363,7 +374,7 @@ class CPerfectClock():
             
             debug(f"Connecting to {NETWORK_SSID} with pass {NETWORK_PASS}")
             self.wlan.active(True)
-            self.wlan.connect(NETWORK_SSID, NETWORK_PASS)
+            self.wlan.connect(self.ssid, self.pass)
             debug(self.wlan.ifconfig())
             if not self.wlan.isconnected():
                 
