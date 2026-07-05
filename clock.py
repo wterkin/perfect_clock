@@ -43,7 +43,7 @@ BLINK_TIMER = 1
 TERMINATE_TIMER = 2
 CLOCK_TIMER = 4
 CLOCK_TIMER_PERIOD = 1000
-DEBUG = True
+DEBUG = False
 UTC_DIFF = 3
 NTP_DELTA = 3155673600
 TRY_COUNT = 5
@@ -158,8 +158,8 @@ class CPerfectClock():
         self.refresh = False
         self.display_time = DISPLAY_TIME
         self.motion_detected = False
-		self.ssid = ""
-        self.pass = ""
+        self.ssid = ""
+        self.passw = ""
         # *** Если мы в отладочном режиме - выставляем таймер на выход
         if DEBUG:
             
@@ -171,10 +171,12 @@ class CPerfectClock():
             cred_file = open("credential", "r")
         json = cred_file.read()
         cred_file.close()
-        credential = ujson.load(json)
-        self.ssid = credential["ssid"] 
-        self.pass = credential["pass"] 
-        
+        #credential = ujson.load(json)
+        #self.ssid = credential["ssid"] 
+        #self.pass = credential["pass"] 
+        # 
+        self.ssid = "IceNet67"
+        self.passw = "ht17-ch38-pp72-kl67-dl94"
         # *** Светодиод должен загораться при срабатывании детектора движения
         self.motion_led_pin = machine.Pin(GPIO_LIST[MOTION_LED_PIN], machine.Pin.OUT)
 
@@ -274,11 +276,13 @@ class CPerfectClock():
         self.tick()
         
         # *** Проверим, не нажата ли кнопка остановки?
-        if self.halt_button.value() == 0:
+        if self.halt_button.value() == 1:
 
             print("*** Terminated!!! ")
             self.clock_timer.deinit()
-            self.terminate_timer.deinit()
+            if DEBUG:
+            
+                self.terminate_timer.deinit()
 
         if MOTION_FLAG:
 
@@ -372,9 +376,9 @@ class CPerfectClock():
         self.wlan = network.WLAN(network.STA_IF)
         if not self.wlan.isconnected():
             
-            debug(f"Connecting to {NETWORK_SSID} with pass {NETWORK_PASS}")
+            # debug(f"Connecting to {NETWORK_SSID} with pass {NETWORK_PASS}")
             self.wlan.active(True)
-            self.wlan.connect(self.ssid, self.pass)
+            self.wlan.connect(self.ssid, self.passw)
             debug(self.wlan.ifconfig())
             if not self.wlan.isconnected():
                 
