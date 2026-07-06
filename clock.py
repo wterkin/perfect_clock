@@ -175,8 +175,8 @@ class CPerfectClock():
         #self.ssid = credential["ssid"] 
         #self.pass = credential["pass"] 
         # 
-        self.ssid = "IceNet67"
-        self.passw = "ht17-ch38-pp72-kl67-dl94"
+        self.ssid = "YOUR_SSID"
+        self.passw = "YOUR_PASS"
         # *** Светодиод должен загораться при срабатывании детектора движения
         self.motion_led_pin = machine.Pin(GPIO_LIST[MOTION_LED_PIN], machine.Pin.OUT)
 
